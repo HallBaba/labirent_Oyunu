@@ -346,7 +346,7 @@
           </div>
           <div class="rule-item">
             <span>👾</span>
-            <span><b>Canavarlar & Köşe Taktiği:</b> Canavarlar köşelere çekildiğinde uykuya dalar (💤) ve <b>yol açılır</b>. O aralıkta yanından güvenle sıyrılıp kaçabilirsin!</span>
+            <span><b>Dolaşan Canavarlar:</b> Canavarlar labirentte sürekli devriye gezer. Labirentte daima birden fazla alternatif yol bulunur; canavarın geçmesini bekleyebilir veya yan koridorlardan güvenle dolanabilirsin!</span>
           </div>
         </div>
 
@@ -458,16 +458,16 @@
     // --- SEVİYE TANIMLARI (10 SEVİYE) ---
     // Labirent boyutları ve canavar sayıları kademeli artar
     const LEVEL_CONFIGS = [
-      { cols: 11, rows: 11, monsters: 1, monsterSpeed: 1.2 }, // Seviye 1: Başlangıç
-      { cols: 13, rows: 13, monsters: 1, monsterSpeed: 1.3 }, // Seviye 2
-      { cols: 15, rows: 15, monsters: 2, monsterSpeed: 1.4 }, // Seviye 3
-      { cols: 17, rows: 17, monsters: 2, monsterSpeed: 1.5 }, // Seviye 4
-      { cols: 19, rows: 19, monsters: 3, monsterSpeed: 1.6 }, // Seviye 5
-      { cols: 21, rows: 21, monsters: 3, monsterSpeed: 1.7 }, // Seviye 6
-      { cols: 23, rows: 23, monsters: 4, monsterSpeed: 1.8 }, // Seviye 7
-      { cols: 25, rows: 25, monsters: 4, monsterSpeed: 1.9 }, // Seviye 8
-      { cols: 27, rows: 27, monsters: 5, monsterSpeed: 2.0 }, // Seviye 9
-      { cols: 29, rows: 29, monsters: 6, monsterSpeed: 2.1 }  // Seviye 10: Büyük Final
+      { cols: 11, rows: 11, monsters: 1, monsterSpeed: 1.1 }, // Seviye 1: Başlangıç
+      { cols: 13, rows: 13, monsters: 1, monsterSpeed: 1.15 }, // Seviye 2
+      { cols: 15, rows: 15, monsters: 2, monsterSpeed: 1.2 }, // Seviye 3
+      { cols: 15, rows: 15, monsters: 2, monsterSpeed: 1.25 }, // Seviye 4
+      { cols: 17, rows: 17, monsters: 2, monsterSpeed: 1.3 }, // Seviye 5
+      { cols: 19, rows: 19, monsters: 3, monsterSpeed: 1.35 }, // Seviye 6
+      { cols: 19, rows: 19, monsters: 3, monsterSpeed: 1.4 }, // Seviye 7
+      { cols: 21, rows: 21, monsters: 4, monsterSpeed: 1.45 }, // Seviye 8
+      { cols: 23, rows: 23, monsters: 4, monsterSpeed: 1.5 }, // Seviye 9
+      { cols: 25, rows: 25, monsters: 5, monsterSpeed: 1.55 }  // Seviye 10: Büyük Final
     ];
 
     // --- OYUN DURUMU ---
@@ -497,58 +497,97 @@
     let keys = { w: false, a: false, s: false, d: false };
 
     // --- LABİRENT OLUŞTURUCU (Recursive Backtracker) ---
-    function generateMaze(cols, rows) {
-      // 1: Duvar, 0: Yol
-      const grid = Array.from({ length: rows }, () => Array(cols).fill(1));
+    // --- LABİRENTİN ÇÖZÜLEBİLİRLİK DOĞRULAMASI (BFS) ---
+    function checkMazeHasPath(grid, sx, sy, gx, gy) {
+      const rows = grid.length;
+      const cols = grid[0].length;
+      const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+      const queue = [[sx, sy]];
+      visited[sy][sx] = true;
 
-      function carve(cx, cy) {
-        grid[cy][cx] = 0;
-        const dirs = [
-          [0, -2], // Yukarı
-          [0, 2],  // Aşağı
-          [-2, 0], // Sol
-          [2, 0]   // Sağ
-        ].sort(() => Math.random() - 0.5);
+      while (queue.length > 0) {
+        const [cx, cy] = queue.shift();
+        if (cx === gx && cy === gy) return true;
 
+        const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
         for (const [dx, dy] of dirs) {
           const nx = cx + dx;
           const ny = cy + dy;
-          if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1 && grid[ny][nx] === 1) {
-            grid[cy + dy / 2][cx + dx / 2] = 0; // Aradaki duvarı kaldır
-            carve(nx, ny);
-          }
-        }
-      }
-
-      carve(1, 1);
-
-      // Çıkmaz sokakların %15'ini hafifçe açarak alternatif kaçış yolları ekle (braiding)
-      for (let y = 2; y < rows - 2; y += 2) {
-        for (let x = 2; x < cols - 2; x += 2) {
-          if (grid[y][x] === 1 && Math.random() < 0.12) {
-            grid[y][x] = 0;
-          }
-        }
-      }
-
-      // Sığınma cepleri (dar koridorlarda canavarın köşeye çekilebileceği ve oyuncunun kaçabileceği cepler)
-      for (let y = 1; y < rows - 1; y++) {
-        for (let x = 1; x < cols - 1; x++) {
-          if (grid[y][x] === 1) {
-            let neighborPaths = 0;
-            if (grid[y - 1]?.[x] === 0) neighborPaths++;
-            if (grid[y + 1]?.[x] === 0) neighborPaths++;
-            if (grid[y]?.[x - 1] === 0) neighborPaths++;
-            if (grid[y]?.[x + 1] === 0) neighborPaths++;
-            if (neighborPaths === 1 && Math.random() < 0.2) {
-              grid[y][x] = 0; // 1 hücrelik kaçış cebi
+          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+            if (grid[ny][nx] === 0 && !visited[ny][nx]) {
+              visited[ny][nx] = true;
+              queue.push([nx, ny]);
             }
           }
         }
       }
+      return false;
+    }
 
-      grid[1][1] = 0;
-      grid[rows - 2][cols - 2] = 0;
+    // --- KESİNLİKLE ÇÖZÜLEBİLİR VE ALTERNATİF YOLLU LABİRENT OLUŞTURUCU ---
+    function generateMaze(cols, rows) {
+      let attempts = 0;
+      let grid;
+
+      while (attempts < 20) {
+        attempts++;
+        grid = Array.from({ length: rows }, () => Array(cols).fill(1));
+
+        // 1. Ana Labirent Yollarını Oy (DFS)
+        function carve(cx, cy) {
+          grid[cy][cx] = 0;
+          const dirs = [
+            [0, -2], [0, 2], [-2, 0], [2, 0]
+          ].sort(() => Math.random() - 0.5);
+
+          for (const [dx, dy] of dirs) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+            if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1 && grid[ny][nx] === 1) {
+              grid[cy + dy / 2][cx + dx / 2] = 0;
+              carve(nx, ny);
+            }
+          }
+        }
+        carve(1, 1);
+
+        // 2. İki Yol Arasındaki Bölücü Duvarları Açarak DÖNGÜLER ve ALTERNATİF YOLLAR Yarat
+        // (Böylece asla tek koridora mahkum kalmazsınız, canavar gelse bile yan koridordan dolanabilirsiniz!)
+        const candidateWalls = [];
+        for (let y = 1; y < rows - 1; y++) {
+          for (let x = 1; x < cols - 1; x++) {
+            if (grid[y][x] === 1) {
+              const horizontalBridge = (grid[y]?.[x - 1] === 0 && grid[y]?.[x + 1] === 0);
+              const verticalBridge = (grid[y - 1]?.[x] === 0 && grid[y + 1]?.[x] === 0);
+              if (horizontalBridge || verticalBridge) {
+                candidateWalls.push({ x, y });
+              }
+            }
+          }
+        }
+
+        // Bölücü duvarların %30'unu açarak zengin kaçış rotaları oluştur
+        candidateWalls.sort(() => Math.random() - 0.5);
+        const wallsToOpen = Math.floor(candidateWalls.length * 0.30);
+        for (let i = 0; i < wallsToOpen; i++) {
+          const w = candidateWalls[i];
+          grid[w.y][w.x] = 0;
+        }
+
+        // 3. Başlangıç ve Bitiş Alanlarını Çoklu Girişle Garantiye Al
+        grid[1][1] = 0;
+        if (cols > 3) grid[1][2] = 0; // Sağa çıkış yolu
+        if (rows > 3) grid[2][1] = 0; // Aşağı çıkış yolu
+
+        grid[rows - 2][cols - 2] = 0; // Hedef
+        if (cols > 3) grid[rows - 2][cols - 3] = 0; // Hedefe soldan giriş
+        if (rows > 3) grid[rows - 3][cols - 2] = 0; // Hedefe üstten giriş
+
+        // 4. Labirentin çözülebilirliğini doğrula
+        if (checkMazeHasPath(grid, 1, 1, cols - 2, rows - 2)) {
+          break;
+        }
+      }
 
       return grid;
     }
@@ -563,7 +602,7 @@
         this.radius = radius;
         this.vx = 0;
         this.vy = 0;
-        this.speed = 3.6;
+        this.speed = 3.8;
         this.friction = 0.84;
         this.trail = [];
       }
@@ -703,6 +742,7 @@
     }
 
     // --- CANAVARLAR (MONSTER AI & KÖŞEYE ÇEKİLME SİSTEMİ) ---
+    // --- CANAVARLAR (MONSTER AI & SÜREKLİ AKTİF DOLAŞIM SİSTEMİ) ---
     class Monster {
       constructor(cellX, cellY, speed) {
         this.startX = (cellX + 0.5) * cellSize;
@@ -710,16 +750,17 @@
         this.x = this.startX;
         this.y = this.startY;
         this.speed = speed;
-        this.radius = cellSize * 0.28;
+        this.radius = cellSize * 0.25;
         this.dir = { x: 0, y: 0 };
         this.eyeOffset = { x: 0, y: 0 };
 
-        // Köşeye çekilme ve yol açma durumları
+        // Dolaşım ve çıkmaz sokak dinlenme durumları
         this.state = 'PATROL'; // 'PATROL' veya 'CORNER_REST'
         this.restTimer = 0;
-        this.restDuration = 2.2; // Köşede 2.2 saniye dinlenir
+        this.restDuration = 0.85; // Sadece çıkmaz sokakta çok kısa dinlenir
         this.targetPos = { x: this.startX, y: this.startY };
         this.currentCell = { x: cellX, y: cellY };
+        this.history = []; // Sürekli ileri dolaşmak için son ziyaret edilen hücreler
 
         this.pickInitialDirection(cellX, cellY);
       }
@@ -730,6 +771,7 @@
         this.state = 'PATROL';
         this.restTimer = 0;
         this.targetPos = { x: this.startX, y: this.startY };
+        this.history = [];
       }
 
       pickInitialDirection(cx, cy) {
@@ -760,7 +802,6 @@
       }
 
       findBestCornerOffset(cx, cy) {
-        // En çok duvar olan köşe vertexini bul ve oraya sığın
         const corners = [
           { dx: -1, dy: -1, walls: (maze[cy-1]?.[cx] === 1 ? 1 : 0) + (maze[cy]?.[cx-1] === 1 ? 1 : 0) },
           { dx: 1, dy: -1, walls: (maze[cy-1]?.[cx] === 1 ? 1 : 0) + (maze[cy]?.[cx+1] === 1 ? 1 : 0) },
@@ -770,10 +811,9 @@
         corners.sort((a, b) => b.walls - a.walls);
         const best = corners[0];
 
-        // Hücre merkezinden seçilen duvara doğru belirgin şekilde kenara çekilsin
         return {
-          x: best.dx * (cellSize * 0.33),
-          y: best.dy * (cellSize * 0.33)
+          x: best.dx * (cellSize * 0.32),
+          y: best.dy * (cellSize * 0.32)
         };
       }
 
@@ -781,14 +821,12 @@
         this.currentCell.x = Math.floor(this.x / cellSize);
         this.currentCell.y = Math.floor(this.y / cellSize);
 
-        // --- KÖŞEDE DİNLENME MODU (YOL AÇIK) ---
+        // --- ÇIKMAZ SOKAKTA KISA DİNLENME (YOL AÇIK) ---
         if (this.state === 'CORNER_REST') {
           this.restTimer -= dt;
-          // Köşe duvarına doğru yumuşakça çekil
-          this.x += (this.targetPos.x - this.x) * 0.2;
-          this.y += (this.targetPos.y - this.y) * 0.2;
+          this.x += (this.targetPos.x - this.x) * 0.25;
+          this.y += (this.targetPos.y - this.y) * 0.25;
 
-          // Süre dolduğunda uyanıp devriyeye geri dön
           if (this.restTimer <= 0) {
             this.state = 'PATROL';
             const cx = Math.floor(this.x / cellSize);
@@ -804,7 +842,7 @@
           return;
         }
 
-        // --- DEVRİYE MODU (HAREKET HALİNDE) ---
+        // --- DEVRİYE MODU (LABİRENTTE SÜREKLİ AKIŞ) ---
         const step = this.speed * 60 * dt;
         this.x += this.dir.x * step;
         this.y += this.dir.y * step;
@@ -814,14 +852,19 @@
         const distToCenter = Math.hypot(this.x - cellCenterX, this.y - cellCenterY);
 
         if (distToCenter < Math.max(2.5, step * 1.3)) {
-          const available = this.getAvailableDirections(this.currentCell.x, this.currentCell.y);
-          const canContinueStraight = available.some(d => d.x === this.dir.x && d.y === this.dir.y);
-          const isDeadEnd = available.length === 1;
-          const isTurn = !canContinueStraight && available.length > 0;
-          const isCrossroad = available.length >= 3;
+          // Hücre merkezine oturt
+          this.x = cellCenterX;
+          this.y = cellCenterY;
 
-          // Dönüşlerde, çıkmaz sokaklarda veya kavşaklarda (%40) köşeye çekilip yol versin
-          if (isDeadEnd || isTurn || (isCrossroad && Math.random() < 0.4)) {
+          // Gezilen hücre geçmişini güncelle (aynı yerde git-gel yapmasını önler)
+          const currentKey = `${this.currentCell.x},${this.currentCell.y}`;
+          this.history.push(currentKey);
+          if (this.history.length > 8) this.history.shift();
+
+          const available = this.getAvailableDirections(this.currentCell.x, this.currentCell.y);
+
+          // 1. Sadece gerçek bir çıkmaz sokaktaysa kısa bir an kenara çekilip yol versin
+          if (available.length === 1) {
             this.state = 'CORNER_REST';
             this.restTimer = this.restDuration;
             const offset = this.findBestCornerOffset(this.currentCell.x, this.currentCell.y);
@@ -830,15 +873,24 @@
             return;
           }
 
-          // Düz devam edebiliyorsa yön seç
-          const forwardDirs = available.filter(d => !(d.x === -this.dir.x && d.y === -this.dir.y));
-          if (forwardDirs.length > 0) {
-            this.dir = forwardDirs[Math.floor(Math.random() * forwardDirs.length)];
-          } else if (available.length > 0) {
-            this.dir = available[0];
+          // 2. Açık yollarda ve kavşaklarda ASLA DURMA, akıcı bir şekilde labirenti gez!
+          let forwardDirs = available.filter(d => !(d.x === -this.dir.x && d.y === -this.dir.y));
+          if (forwardDirs.length === 0) {
+            forwardDirs = available;
           }
-          this.x = cellCenterX;
-          this.y = cellCenterY;
+
+          // En az gezilmiş veya en eski ziyaret edilmiş yöne öncelik ver
+          if (forwardDirs.length > 1) {
+            forwardDirs.sort((a, b) => {
+              const keyA = `${this.currentCell.x + a.x},${this.currentCell.y + a.y}`;
+              const keyB = `${this.currentCell.x + b.x},${this.currentCell.y + b.y}`;
+              const indexA = this.history.lastIndexOf(keyA);
+              const indexB = this.history.lastIndexOf(keyB);
+              return indexA - indexB;
+            });
+          }
+
+          this.dir = forwardDirs[0];
         }
 
         this.eyeOffset.x = this.dir.x * 2.5;
@@ -1022,20 +1074,21 @@
       // Oyuncu başlangıç (1, 1 hücresi)
       const pStartX = 1.5 * cellSize;
       const pStartY = 1.5 * cellSize;
-      const pRadius = cellSize * 0.25;
+      const pRadius = cellSize * 0.22;
       player = new Player(pStartX, pStartY, pRadius);
 
       // Hedef (Bayrak) (rows-2, cols-2 hücresi)
       goal = new Goal(cols - 2, rows - 2);
 
-      // Canavarları yerleştir (oyuncudan uzakta yollara)
+      // Canavarları yerleştir (oyuncudan ve hedeften güvenli mesafede yollara)
       monsters = [];
       const openCells = [];
       for (let y = 1; y < rows - 1; y++) {
         for (let x = 1; x < cols - 1; x++) {
           if (maze[y][x] === 0) {
-            // Başlangıç noktasından en az 5 birim uzakta olsun
-            if (Math.hypot(x - 1, y - 1) > 4 && !(x === cols - 2 && y === rows - 2)) {
+            const distFromStart = Math.hypot(x - 1, y - 1);
+            const distFromGoal = Math.hypot(x - (cols - 2), y - (rows - 2));
+            if (distFromStart > 5 && distFromGoal > 3) {
               openCells.push({ x, y });
             }
           }
@@ -1203,8 +1256,8 @@
           m.draw(time);
 
           // Oyuncu ile canavar çarpışma kontrolü
-          // Canavar köşeye çekilip uyurken yol açılır, sadece canavarın üzerine basılırsa yakalar
-          const monsterHitRadius = m.state === 'CORNER_REST' ? m.radius * 0.45 : m.radius * 0.72;
+          // Canavar dinlenirken çarpışma alanı küçülür, koridorda dolaşırken adil bir mesafe sunar
+          const monsterHitRadius = m.state === 'CORNER_REST' ? m.radius * 0.40 : m.radius * 0.68;
           const distToMonster = Math.hypot(player.x - m.x, player.y - m.y);
           if (distToMonster < player.radius + monsterHitRadius) {
             handleMonsterCollision();
